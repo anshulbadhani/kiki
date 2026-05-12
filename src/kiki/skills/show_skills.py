@@ -1,115 +1,124 @@
-"""
-Skill: show_skills
-Generates an interactive skill graph and opens it in the browser.
-Uses networkx + pyvis. Zero extra deps beyond what's already installed
-if pyvis is added — otherwise falls back to a plain HTML table.
-"""
 from __future__ import annotations
 import json
 import tempfile
 import webbrowser
-from pathlib import Path
+import hashlib
+from dataclasses import dataclass, field
 
-NAME        = "show_skills"
-DESCRIPTION = "show visualise graph skills capabilities what can you do map"
-EXAMPLES    = [
-    "show your skills",
-    "skill graph",
-    "what can you do",
-    "show me your capabilities",
-    "visualise skills",
-    "map of skills",
-    "show skill map",
-    "what skills do you have",
-    "show all skills",
-    "capabilities graph",
-]
-PARAMETERS      = {}
-REQUIRES_VISION = False
+from .base import Skill
 
 
-# ---------------------------------------------------------------------------
-# Graph data builder
-# ---------------------------------------------------------------------------
+def _category_color(category: str) -> str:
+    """Deterministically derive a muted hex color from a category name."""
+    h = int(hashlib.md5(category.encode()).hexdigest()[:6], 16)
+    # extract HSL-like values — keep saturation/lightness in a pleasant range
+    hue   = h % 360
+    return _hsl_to_hex(hue, 45, 38)
 
-def _build_graph_data(registry) -> dict:
-    """
-    Build nodes and edges from the registry.
-    Groups skills by rough category based on name keywords.
-    """
-    skills = registry.all_skills()
 
-    categories = {
-        "system":  ["open_app", "notify", "clipboard"],
-        "vision":  ["screenshot"],
-        "web":     ["web_search"],
-        "kiki":    ["help", "show_skills"],
-    }
+def _hsl_to_hex(h: int, s: int, l: int) -> str:
+    s /= 100
+    l /= 100
+    c = (1 - abs(2 * l - 1)) * s
+    x = c * (1 - abs((h / 60) % 2 - 1))
+    m = l - c / 2
+    if   h < 60:  r, g, b = c, x, 0
+    elif h < 120: r, g, b = x, c, 0
+    elif h < 180: r, g, b = 0, c, x
+    elif h < 240: r, g, b = 0, x, c
+    elif h < 300: r, g, b = x, 0, c
+    else:         r, g, b = c, 0, x
+    r = int((r + m) * 255)
+    g = int((g + m) * 255)
+    b = int((b + m) * 255)
+    return f"#{r:02x}{g:02x}{b:02x}"
 
-    # reverse map: skill_name → category
-    skill_cat = {}
-    for cat, names in categories.items():
-        for name in names:
-            skill_cat[name] = cat
 
-    cat_colors = {
-        "system": "#3a7bd5",
-        "vision": "#0f6e56",
-        "web":    "#8a4af3",
-        "kiki":   "#185FA5",
-        "other":  "#5F5E5A",
-    }
+@dataclass
+class ShowSkillsSkill(Skill):
+    name:        str       = "show_skills"
+    description: str       = "show visualise graph skills capabilities what can you do map"
+    examples:    list[str] = field(default_factory=lambda: [
+        "show your skills",
+        "skill graph",
+        "what can you do",
+        "show me your capabilities",
+        "visualise skills",
+        "map of skills",
+        "show skill map",
+        "show all skills",
+        "capabilities graph",
+    ])
+    category:   str  = "kiki"
+    parameters: dict = field(default_factory=dict)
 
-    nodes = []
+    def run(self, **kwargs) -> str:
+        registry = kwargs.get("registry")
+        if registry is None:
+            return "registry unavailable — can't build skill graph."
+        graph_data = self._build_graph_data(registry)
+        html       = self._generate_html(graph_data)
 
-    # category hub nodes
-    seen_cats = set()
-    for skill in skills:
-        cat = skill_cat.get(skill.name, "other")
-        if cat not in seen_cats:
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".html", delete=False, mode="w", encoding="utf-8"
+        )
+        tmp.write(html)
+        tmp.close()
+
+        webbrowser.open(f"file://{tmp.name}")
+        return "skill map opened in your browser."
+
+    # -----------------------------------------------------------------------
+    # Graph builder — fully dynamic, no hardcoded categories
+    # -----------------------------------------------------------------------
+
+    def _build_graph_data(self, registry) -> dict:
+        skills = registry.all_skills()
+
+        # collect unique categories directly from skills
+        categories = {skill.category for skill in skills}
+
+        nodes = []
+
+        # category hub nodes
+        for cat in categories:
             nodes.append({
                 "id":    f"cat_{cat}",
                 "label": cat,
                 "type":  "category",
-                "color": cat_colors.get(cat, cat_colors["other"]),
+                "color": _category_color(cat),
                 "size":  28,
             })
-            seen_cats.add(cat)
 
-    # skill nodes
-    for skill in skills:
-        cat = skill_cat.get(skill.name, "other")
-        nodes.append({
-            "id":       skill.name,
-            "label":    skill.name,
-            "type":     "skill",
-            "color":    cat_colors.get(cat, cat_colors["other"]),
-            "size":     18,
-            "examples": skill.examples[:3],
-            "desc":     skill.description,
-        })
+        # skill nodes
+        for skill in skills:
+            nodes.append({
+                "id":       skill.name,
+                "label":    skill.name,
+                "type":     "skill",
+                "color":    _category_color(skill.category),
+                "size":     18,
+                "examples": skill.examples[:3],
+                "desc":     skill.description,
+            })
 
-    # edges: category hub → skill
-    edges = []
-    for skill in skills:
-        cat = skill_cat.get(skill.name, "other")
-        edges.append({
-            "from": f"cat_{cat}",
-            "to":   skill.name,
-        })
+        # edges: category hub → skill
+        edges = [
+            {"from": f"cat_{skill.category}", "to": skill.name}
+            for skill in skills
+        ]
 
-    return {"nodes": nodes, "edges": edges}
+        return {"nodes": nodes, "edges": edges}
 
+    # -----------------------------------------------------------------------
+    # HTML — unchanged from original
+    # -----------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# HTML generator
-# ---------------------------------------------------------------------------
+    def _generate_html(self, graph_data: dict) -> str:
+        nodes_json = json.dumps(graph_data["nodes"])
+        edges_json = json.dumps(graph_data["edges"])
 
-def _generate_html(graph_data: dict) -> str:
-    nodes_json = json.dumps(graph_data["nodes"])
-    edges_json = json.dumps(graph_data["edges"])
-
-    return f"""<!DOCTYPE html>
+        return f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -178,7 +187,6 @@ function resize() {{
 }}
 
 function layout() {{
-  // place category hubs in a circle, skills around their hub
   const cats    = NODES.filter(n => n.type === "category");
   const catR    = Math.min(W, H) * 0.28;
   const centerX = W / 2, centerY = H / 2;
@@ -222,7 +230,6 @@ function layout() {{
 function draw() {{
   ctx.clearRect(0, 0, W, H);
 
-  // edges
   EDGES.forEach(e => {{
     const a = nodeMap[e.from], b = nodeMap[e.to];
     if (!a || !b) return;
@@ -234,12 +241,10 @@ function draw() {{
     ctx.stroke();
   }});
 
-  // nodes
   Object.values(nodeMap).forEach(n => {{
     const isHovered = hovering === n.id;
     const r         = n.size + (isHovered ? 4 : 0);
 
-    // glow
     if (isHovered) {{
       const g = ctx.createRadialGradient(n.x, n.y, r, n.x, n.y, r * 2.5);
       g.addColorStop(0, n.color + "44");
@@ -250,7 +255,6 @@ function draw() {{
       ctx.fill();
     }}
 
-    // circle
     const grad = ctx.createRadialGradient(
       n.x - r * 0.3, n.y - r * 0.3, r * 0.1,
       n.x, n.y, r
@@ -260,43 +264,37 @@ function draw() {{
     grad.addColorStop(1, n.color + "aa");
     ctx.beginPath();
     ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-    ctx.fillStyle   = grad;
+    ctx.fillStyle = grad;
     ctx.fill();
 
-    // label
-    ctx.fillStyle   = n.type === "category" ? "#fff" : "#bbb";
-    ctx.font        = n.type === "category"
-                      ? "bold 11px Consolas, monospace"
-                      : "10px Consolas, monospace";
-    ctx.textAlign   = "center";
+    ctx.fillStyle    = n.type === "category" ? "#fff" : "#bbb";
+    ctx.font         = n.type === "category"
+                       ? "bold 11px Consolas, monospace"
+                       : "10px Consolas, monospace";
+    ctx.textAlign    = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(n.label, n.x, n.y + r + 14);
   }});
 }}
 
-// interaction
 canvas.addEventListener("mousemove", e => {{
   const mx = e.clientX, my = e.clientY;
-
   if (dragging) {{
     nodeMap[dragging].x = mx + dragOffX;
     nodeMap[dragging].y = my + dragOffY;
     draw();
     return;
   }}
-
   hovering = null;
   for (const [id, n] of Object.entries(nodeMap)) {{
     const dx = mx - n.x, dy = my - n.y;
     if (Math.sqrt(dx*dx + dy*dy) < n.size + 6) {{
       hovering = id;
       canvas.style.cursor = "pointer";
-
       document.getElementById("tt-name").textContent     = n.label;
       document.getElementById("tt-desc").textContent     = n.desc || "";
       document.getElementById("tt-examples").textContent =
         n.examples ? "e.g. " + n.examples.join(" · ") : "";
-
       tooltip.style.display = "block";
       tooltip.style.left    = (mx + 16) + "px";
       tooltip.style.top     = (my - 10) + "px";
@@ -304,7 +302,6 @@ canvas.addEventListener("mousemove", e => {{
       return;
     }}
   }}
-
   canvas.style.cursor   = "default";
   tooltip.style.display = "none";
   if (hovering !== null) {{ hovering = null; draw(); }}
@@ -333,56 +330,37 @@ resize();
 
 
 # ---------------------------------------------------------------------------
-# Run
-# ---------------------------------------------------------------------------
-
-def run(**kwargs) -> str:
-    registry = kwargs.get("registry")
-    if registry is None:
-        return "registry unavailable — can't build skill graph."
-
-    graph_data = _build_graph_data(registry)
-
-    html = _generate_html(graph_data)
-
-    tmp = tempfile.NamedTemporaryFile(
-        suffix=".html",
-        delete=False,
-        mode="w",
-        encoding="utf-8",
-    )
-    tmp.write(html)
-    tmp.close()
-
-    webbrowser.open(f"file://{tmp.name}")
-    return "skill map opened in your browser."
-
-
-# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     class _StubSkill:
-        def __init__(self, name, examples):
+        def __init__(self, name, category, examples):
             self.name        = name
+            self.category    = category
             self.examples    = examples
             self.description = f"{name} skill"
 
     class _StubRegistry:
         def all_skills(self):
             return [
-                _StubSkill("open_app",   ["open chrome", "launch spotify"]),
-                _StubSkill("web_search", ["search for recipes"]),
-                _StubSkill("clipboard",  ["read my clipboard"]),
-                _StubSkill("screenshot", ["what is on my screen"]),
-                _StubSkill("notify",     ["remind me to drink water"]),
-                _StubSkill("help",       ["help", "what can you do"]),
-                _StubSkill("show_skills",["show skill graph"]),
+                _StubSkill("open_app",    "system", ["open chrome"]),
+                _StubSkill("web_search",  "web",    ["search for recipes"]),
+                _StubSkill("clipboard",   "system", ["read my clipboard"]),
+                _StubSkill("notify",      "system", ["remind me to drink water"]),
+                _StubSkill("help",        "kiki",   ["help"]),
+                _StubSkill("show_skills", "kiki",   ["show skill graph"]),
+                _StubSkill("my_skill",    "custom", ["do the thing"]),  # new category
             ]
 
-    print("generating skill graph...")
-    result = run(registry=_StubRegistry())
+    result = ShowSkillsSkill().run(registry=_StubRegistry())
     assert "browser" in result, f"unexpected: {result}"
-    print(f"result: {result}")
+
+    # verify colors are derived, not hardcoded
+    assert _category_color("custom") != _category_color("system")
+    assert _category_color("system") == _category_color("system")  # deterministic
+
+    print(f"system color : {_category_color('system')}")
+    print(f"web color    : {_category_color('web')}")
+    print(f"custom color : {_category_color('custom')}")
     print("show_skills.py — all tests passed.")

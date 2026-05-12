@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .encoder import Encoder
+from .base import Skill
 from ..config import SKILL_THRESHOLD
 
 
@@ -64,13 +65,10 @@ class Registry:
     # -----------------------------------------------------------------------
 
     def _load_all(self) -> None:
-        """Scan the skills package and load every valid skill module."""
-        skills_pkg = sys.modules.get(__package__) or \
-                     importlib.import_module(__package__)
-        pkg_path   = [str(Path(__file__).parent)]
+        pkg_path = [str(Path(__file__).parent)]
 
         for finder, module_name, _ in pkgutil.iter_modules(pkg_path):
-            if module_name in ("registry", "encoder"):
+            if module_name in ("registry", "encoder", "base"):
                 continue
 
             full_name = f"{__package__}.{module_name}"
@@ -80,50 +78,38 @@ class Registry:
                 print(f"[registry] failed to load {module_name}: {e}")
                 continue
 
-            if not all(hasattr(mod, a) for a in
-                       ("NAME", "DESCRIPTION", "EXAMPLES", "run")):
-                continue
-
-            skill = Skill(
-                name            = mod.NAME,
-                description     = mod.DESCRIPTION,
-                examples        = mod.EXAMPLES,
-                parameters      = getattr(mod, "PARAMETERS", {}),
-                requires_vision = getattr(mod, "REQUIRES_VISION", False),
-                run             = mod.run,
-            )
-            skill.vector = self._encoder.encode(skill.corpus)
-            self._skills[skill.name] = skill
-            print(f"[registry] loaded skill: {skill.name}")
+            # find Skill subclasses defined in this module
+            for attr_name in dir(mod):
+                attr = getattr(mod, attr_name)
+                if (
+                    isinstance(attr, type)
+                    and issubclass(attr, Skill)
+                    and attr is not Skill
+                ):
+                    try:
+                        instance = attr()
+                        instance.vector = self._encoder.encode(instance.corpus)
+                        self._skills[instance.name] = instance
+                        print(f"[registry] loaded skill: {instance.name}")
+                    except Exception as e:
+                        print(f"[registry] failed to instantiate {attr_name}: {e}")
 
     # -----------------------------------------------------------------------
     # Routing
     # -----------------------------------------------------------------------
 
-    def route(
-        self,
-        message:    str,
-        screenshot: np.ndarray | None = None,
-        threshold:  float             = SKILL_THRESHOLD,
-    ) -> str | None:
-        """
-        Try to match message to a skill.
-        Returns skill output string, or None if no confident match.
-        """
+    def route(self, message: str, screenshot=None, threshold: float = SKILL_THRESHOLD) -> str | None:
         if not self._skills:
             return None
 
-        query      = self._encoder.encode(message)
+        query = self._encoder.encode(message)
         candidates = [
             (name, skill.vector)
             for name, skill in self._skills.items()
             if not skill.requires_vision or screenshot is not None
         ]
 
-        best_name, score = self._encoder.best_match(
-            query, candidates, threshold
-        )
-
+        best_name, score = self._encoder.best_match(query, candidates, threshold)
         if best_name is None:
             return None
 
@@ -131,7 +117,7 @@ class Registry:
         print(f"[registry] matched '{best_name}' (score={score:.3f})")
 
         try:
-            kwargs = self._extract_args(message, skill)
+            kwargs = {"query": message}
             if skill.requires_vision:
                 kwargs["screenshot"] = screenshot
             return skill.run(**kwargs)
