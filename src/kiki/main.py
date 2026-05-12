@@ -12,7 +12,7 @@ def main() -> None:
     ball.show()
     # ball.raise_()
     # ball.activateWindow()
-    ball.force_always_on_top()
+    # ball.force_always_on_top()
 
     sys.exit(app.exec())
 

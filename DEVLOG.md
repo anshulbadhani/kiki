@@ -20,3 +20,4 @@ Stack: Python 3.12, PyQt6, Groq API (llama-3.3-70b), uv for packaging.
 - **3:32 PM:** I think I should take some rest now, I will write here when I come back after a break. Maybe study for exams, idk
 - **5:20 PM:** Getting back to the work
 - **5:33 PM:** Always on top is not working with WSLg. So, I will move to windows native (would have to setup python from scratch T_T)
+- **6:07 PM:** Update: I made it work and this dude is soo cutee. Lol I spent a lot of time playing with it. Now, I will take a break from dev and study Linear Algebra for exams 🙄
