@@ -14,6 +14,7 @@ from ..config import (
 from ..fsm.mood import MoodFSM
 from ..fsm.mode import ModeFSM
 
+import sys
 
 # ---------------------------------------------------------------------------
 # BallWidget
@@ -51,6 +52,13 @@ class BallWidget(QWidget):
             Qt.WindowType.Tool               | # no taskbar entry
             Qt.WindowType.X11BypassWindowManagerHint
         )
+        
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.dwmapi.DwmExtendFrameIntoClientArea(
+                int(self.winId()),
+                ctypes.byref((ctypes.c_int * 4)(0, 0, 0, 0))
+            )
         
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
