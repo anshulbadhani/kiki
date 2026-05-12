@@ -16,3 +16,4 @@ Stack: Python 3.12, PyQt6, Groq API (llama-3.3-70b), uv for packaging.
 ## 12th May 2026
 - **2:31 PM:** Starting with fsm/base.py – zero UI dependencies, fully testable headless.
 - **3:04 PM:** Claude limit reached 🙃
+- **3:12 PM:** I was manually fixing the bugs, when I realised that I have to copy paste same if conditions if I would have to add something new. Which defeats the purpose of the FSM in the first place. I would have to be aware of this pattern if I could make an MVP of this. Maybe this could go in 10 more hours wala thing

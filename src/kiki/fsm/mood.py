@@ -24,6 +24,8 @@ class Calm(State):
             self.fsm.score = max(0.0, self.fsm.score - MOOD_DECAY_PER_TICK)
             if self.fsm.idle_ms >= IDLE_TIMEOUT_MS:
                 return "Idle"
+        elif event == "truce":
+            return "Calm"
         return None
 
 
@@ -37,15 +39,21 @@ class Annoyed(State):
             self.fsm.score = max(0.0, self.fsm.score - MOOD_DECAY_PER_TICK)
             if self.fsm.score < ANNOYED_THRESHOLD:
                 return "Recovering"
+        elif event == "truce":
+            return "Calm"
         return None
 
 
 class Grumpy(State):
     def handle_event(self, event: str, **kwargs) -> str | None:
-        if event == "tick":
+        if event == "harassment":
+            self.fsm.score += HARASSMENT_INCREMENT
+        elif event == "tick":
             self.fsm.score = max(0.0, self.fsm.score - MOOD_DECAY_PER_TICK)
             if self.fsm.score < GRUMPY_THRESHOLD:
                 return "Recovering"
+        elif event == "truce":
+            return "Calm"
         return None
 
 
@@ -59,8 +67,10 @@ class Recovering(State):
                 return "Annoyed"
         elif event == "tick":
             self.fsm.score = max(0.0, self.fsm.score - MOOD_DECAY_PER_TICK)
-            if self.fsm.score == 0.0:
+            if self.fsm.score <= 0.0:
                 return "Calm"
+        elif event == "truce":
+            return "Calm"
         return None
 
 
@@ -70,6 +80,8 @@ class Idle(State):
 
     def handle_event(self, event: str, **kwargs) -> str | None:
         if event == "any_input":
+            return "Calm"
+        elif event == "truce":
             return "Calm"
         return None
 
@@ -119,8 +131,7 @@ class MoodFSM(FSM):
         """Opening chat = truce. Reset score, go calm."""
         self.score = 0.0
         self.idle_ms = 0.0
-        if not self.is_in("Calm"):
-            self._transition("Calm")
+        self.send("truce")
 
     def pause(self) -> None:
         self._paused = True
