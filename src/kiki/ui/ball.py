@@ -6,6 +6,7 @@ import time
 from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QColor, QRadialGradient
+from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF, QObject, pyqtSignal
 
 from ..config import (
     BALL_SIZE, BALL_OPACITY, BALL_DEFAULT_X, BALL_DEFAULT_Y,
@@ -13,6 +14,8 @@ from ..config import (
 )
 from ..fsm.mood import MoodFSM
 from ..fsm.mode import ModeFSM
+from ..brain import Brain
+from .chat import ChatPanel
 
 
 # ---------------------------------------------------------------------------
@@ -47,31 +50,28 @@ TARGET_SCALE: dict[str, float] = {
 # Platform helpers
 # ---------------------------------------------------------------------------
 
+class _LLMSignals(QObject):
+    token = pyqtSignal(str)
+    done  = pyqtSignal()
+    error = pyqtSignal(str)
+    
 def _apply_window_flags(widget: QWidget) -> None:
-    """Set frameless, always-on-top, no-taskbar flags cross-platform."""
     flags = (
         Qt.WindowType.FramelessWindowHint |
         Qt.WindowType.WindowStaysOnTopHint |
         Qt.WindowType.Tool
     )
     if sys.platform == "linux":
-        # X11BypassWindowManagerHint needed on some compositors
         flags |= Qt.WindowType.X11BypassWindowManagerHint
     widget.setWindowFlags(flags)
 
 
 def _apply_translucency(widget: QWidget) -> None:
-    """Enable per-pixel alpha transparency cross-platform."""
     widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
 
 
 def _fix_transparency_after_show(widget: QWidget) -> None:
-    """
-    Post-show platform fixes.
-    Windows: extend DWM frame to full client area for true transparency.
-    Linux:   send _NET_WM_STATE_ABOVE atom for compositors that ignore the Qt hint.
-    """
     if sys.platform == "win32":
         _dwm_extend_frame(widget)
     elif sys.platform == "linux":
@@ -93,7 +93,6 @@ def _x11_force_above(widget: QWidget) -> None:
     try:
         from Xlib import display, X
         from Xlib.protocol import event as xevent
-
         d = display.Display()
         root = d.screen().root
         win = d.create_resource_object("window", int(widget.winId()))
@@ -113,12 +112,10 @@ def _x11_force_above(widget: QWidget) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Animation state  (pure data, no Qt dependency)
+# Animation state
 # ---------------------------------------------------------------------------
 
 class _AnimState:
-    """Holds all transient animation values, updated every ANIMATION_TICK_MS."""
-
     def __init__(self) -> None:
         self.scale:       float = 1.0
         self.wobble:      float = 0.0
@@ -133,36 +130,24 @@ class _AnimState:
         speed = WOBBLE_SPEED.get(mood, 0.05)
         amp   = WOBBLE_AMP.get(mood, 3.0)
         self.wobble = math.sin(self._tick * speed) * amp
-
         if self._shake_left > 0:
             self._shake_left -= 1
             self.wobble += math.sin(self._tick * 0.8) * 12
-
         target = TARGET_SCALE.get(mood, 1.0)
-        self.scale += (target - self.scale) * 0.12   # lerp toward target
+        self.scale += (target - self.scale) * 0.12
 
 
 # ---------------------------------------------------------------------------
-# Harassment tracker  (pure data, no Qt dependency)
+# Harassment tracker
 # ---------------------------------------------------------------------------
 
 class _HarassmentTracker:
-    """
-    Counts cursor enter events in a rolling time window.
-    Avoids 24/7 mouse polling — purely event-driven.
-    """
-
-    def __init__(
-        self,
-        window_ms: float = 1500,
-        threshold: int   = 4,
-    ) -> None:
+    def __init__(self, window_ms: float = 1500, threshold: int = 4) -> None:
         self._window_ms  = window_ms
         self._threshold  = threshold
         self._timestamps: list[float] = []
 
     def record_enter(self) -> bool:
-        """Call on every enterEvent. Returns True if harassment threshold hit."""
         now = time.monotonic() * 1000
         self._timestamps.append(now)
         self._timestamps = [
@@ -180,30 +165,37 @@ class _HarassmentTracker:
 
 class BallWidget(QWidget):
     """
-    Frameless translucent orb.  Owns both FSMs and drives them.
-    Platform differences are handled internally — callers need not care.
+    Frameless translucent orb. Owns both FSMs, the chat panel, and the brain.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, brain: Brain) -> None:
         super().__init__()
 
-        # FSMs
-        self.mood = MoodFSM()
-        self.mode = ModeFSM(mood_fsm=self.mood)
+        # Core objects
+        self._brain = brain
+        self.mood   = MoodFSM()
+        self.mode   = ModeFSM(mood_fsm=self.mood)
 
-        # Platform window setup
+        # Platform setup
         _apply_window_flags(self)
         _apply_translucency(self)
-
-        # Size — extra padding so the glow has room
         self.setFixedSize(BALL_SIZE * 3, BALL_SIZE * 3)
-
-        # Default position: bottom-left
         self._move_to_default()
 
         # Sub-objects
         self._anim       = _AnimState()
         self._harassment = _HarassmentTracker()
+
+        # Chat panel — hidden until mode enters ChatOpen
+        self._chat = ChatPanel()
+        self._chat.message_submitted.connect(self._on_message_submitted)
+        self._chat.close_requested.connect(self._on_chat_close_requested)
+
+        # Wire mode FSM transitions → show/hide chat
+        self.mode.on_transition(self._on_mode_transition)
+
+        # Wire mood FSM transitions → update chat avatar
+        self.mood.on_transition(self._on_mood_transition)
 
         # Drag state
         self._drag_origin: QPoint | None = None
@@ -229,6 +221,62 @@ class BallWidget(QWidget):
         _fix_transparency_after_show(self)
 
     # -----------------------------------------------------------------------
+    # FSM transition callbacks
+    # -----------------------------------------------------------------------
+
+    def _on_mode_transition(self, from_state: str, to_state: str) -> None:
+        if to_state == "ChatOpen":
+            self._chat.show()
+            self._chat.focus_input()
+            self._chat.update_avatar_mood(self.mood.mood)
+        elif from_state == "ChatOpen" and to_state == "Orb":
+            self._chat.hide()
+        elif to_state == "Thinking":
+            self._chat.set_thinking(True)
+        elif from_state == "Thinking":
+            self._chat.set_thinking(False)
+
+    def _on_mood_transition(self, from_state: str, to_state: str) -> None:
+        # keep chat avatar in sync whenever mood changes
+        if self._chat.isVisible():
+            self._chat.update_avatar_mood(to_state)
+
+    # -----------------------------------------------------------------------
+    # Chat signals
+    # -----------------------------------------------------------------------
+
+    def _on_message_submitted(self, text: str) -> None:
+        if self.mode.mode != "ChatOpen":
+            return
+        self._chat.add_user_message(text)
+        self.mode.send_msg()
+
+        bubble  = self._chat.start_kiki_message()
+        signals = _LLMSignals()
+
+        signals.token.connect(bubble.append_token)
+        signals.done.connect(self._on_llm_done)
+        signals.error.connect(lambda e: bubble.append_token(f"\n[error: {e}]"))
+        signals.error.connect(lambda _: self._on_llm_done())
+
+        self._brain.chat(
+            message  = text,
+            mood     = self.mood.mood,
+            on_token = lambda t: signals.token.emit(t),
+            on_done  = lambda _: signals.done.emit(),
+            on_error = lambda e: signals.error.emit(str(e)),
+        )
+
+    def _on_llm_done(self) -> None:
+        self.mode.llm_reply()    # Thinking → Responding
+        self.mode.done()         # Responding → ChatOpen
+        self._chat.focus_input()
+
+    def _on_chat_close_requested(self) -> None:
+        if self.mode.mode == "ChatOpen":
+            self.mode.click()    # ChatOpen → Orb (also hides panel via transition cb)
+
+    # -----------------------------------------------------------------------
     # Timer slots
     # -----------------------------------------------------------------------
 
@@ -247,21 +295,15 @@ class BallWidget(QWidget):
     def paintEvent(self, _) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
         cx = self.width()  / 2 + self._anim.wobble
         cy = self.height() / 2
         r  = (BALL_SIZE / 2) * self._anim.scale
-
         base = MOOD_COLORS.get(self.mood.mood, MOOD_COLORS["Calm"])
-
         self._paint_glow(painter, cx, cy, r, base)
         self._paint_body(painter, cx, cy, r, base)
-
         painter.end()
 
-    def _paint_glow(
-        self, p: QPainter, cx: float, cy: float, r: float, base: QColor
-    ) -> None:
+    def _paint_glow(self, p, cx, cy, r, base) -> None:
         grad = QRadialGradient(cx, cy, r * 2.2)
         glow = QColor(base)
         glow.setAlpha(40)
@@ -271,9 +313,7 @@ class BallWidget(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.drawEllipse(QRectF(cx - r * 2.2, cy - r * 2.2, r * 4.4, r * 4.4))
 
-    def _paint_body(
-        self, p: QPainter, cx: float, cy: float, r: float, base: QColor
-    ) -> None:
+    def _paint_body(self, p, cx, cy, r, base) -> None:
         grad = QRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 1.2)
         body = QColor(base)
         body.setAlpha(int(255 * BALL_OPACITY))
