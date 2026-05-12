@@ -25,29 +25,29 @@ from .base import Skill
 from ..config import SKILL_THRESHOLD
 
 
-# ---------------------------------------------------------------------------
-# Skill descriptor
-# ---------------------------------------------------------------------------
+# # ---------------------------------------------------------------------------
+# # Skill descriptor
+# # ---------------------------------------------------------------------------
 
-@dataclass
-class Skill:
-    name:            str
-    description:     str
-    examples:        list[str]
-    parameters:      dict[str, str]
-    requires_vision: bool
-    run:             callable
-    vector:          np.ndarray = field(default=None, repr=False)
+# @dataclass
+# class Skill:
+#     name:            str
+#     description:     str
+#     examples:        list[str]
+#     parameters:      dict[str, str]
+#     requires_vision: bool
+#     run:             callable
+#     vector:          np.ndarray = field(default=None, repr=False)
 
-    @property
-    def corpus(self) -> str:
-        """Text we embed to represent this skill."""
-        return " ".join([self.description] + self.examples)
+#     @property
+#     def corpus(self) -> str:
+#         """Text we embed to represent this skill."""
+#         return " ".join([self.description] + self.examples)
 
 
-# ---------------------------------------------------------------------------
-# Registry
-# ---------------------------------------------------------------------------
+# # ---------------------------------------------------------------------------
+# # Registry
+# # ---------------------------------------------------------------------------
 
 class Registry:
     """
@@ -66,19 +66,20 @@ class Registry:
 
     def _load_all(self) -> None:
         pkg_path = [str(Path(__file__).parent)]
+        pkg_name = __package__
 
         for finder, module_name, _ in pkgutil.iter_modules(pkg_path):
             if module_name in ("registry", "encoder", "base"):
                 continue
 
-            full_name = f"{__package__}.{module_name}"
+            full_name = f"{pkg_name}.{module_name}"
+            print(f"[registry] scanning: {module_name}")
             try:
                 mod = importlib.import_module(full_name)
             except Exception as e:
                 print(f"[registry] failed to load {module_name}: {e}")
                 continue
 
-            # find Skill subclasses defined in this module
             for attr_name in dir(mod):
                 attr = getattr(mod, attr_name)
                 if (
@@ -87,7 +88,7 @@ class Registry:
                     and attr is not Skill
                 ):
                     try:
-                        instance = attr()
+                        instance        = attr()
                         instance.vector = self._encoder.encode(instance.corpus)
                         self._skills[instance.name] = instance
                         print(f"[registry] loaded skill: {instance.name}")
@@ -117,7 +118,7 @@ class Registry:
         print(f"[registry] matched '{best_name}' (score={score:.3f})")
 
         try:
-            kwargs = {"query": message}
+            kwargs = {"query": message, "registry": self}
             if skill.requires_vision:
                 kwargs["screenshot"] = screenshot
             return skill.run(**kwargs)

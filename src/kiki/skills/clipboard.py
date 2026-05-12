@@ -108,3 +108,4 @@ if __name__ == "__main__":
     assert "hello from kiki" in result
 
     print("clipboard.py — all tests passed.")
+    
