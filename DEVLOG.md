@@ -15,3 +15,4 @@ Stack: Python 3.12, PyQt6, Groq API (llama-3.3-70b), uv for packaging.
 
 ## 12th May 2026
 - **2:31 PM:** Starting with fsm/base.py – zero UI dependencies, fully testable headless.
+- **3:04 PM:** Claude limit reached 🙃
