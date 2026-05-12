@@ -22,4 +22,7 @@ Stack: Python 3.12, PyQt6, Groq API (llama-3.3-70b), uv for packaging.
 - **5:33 PM:** Always on top is not working with WSLg. So, I will move to windows native (would have to setup python from scratch T_T)
 - **6:07 PM:** Update: I made it work and this dude is soo cutee. Lol I spent a lot of time playing with it. Now, I will take a break from dev and study Linear Algebra for exams 🙄
 - **8:35 PM:** Started devlopment again
-- **9:00 PM:** Done with all the basic UI and chat features. I would like to make it more alive and add some "intelligence" to it by writing basic scripts to do basic stuff like alarms and calendar updates.
+- **9:00 PM:** Done with all the basic UI and chat features. I would like to make it more alive and add some "intelligence" to it by writing basic scripts to do basic stuff like alarms and calendar updates. But claude limit reached so, I'll do it tomorrow (maybe, or figure out something else).
+
+## 13th May 2026
+- **1:21 AM:** Idk I just felt like I should make one more commit before sleeping. So, here I am

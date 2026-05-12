@@ -51,6 +51,7 @@ TARGET_SCALE: dict[str, float] = {
 # ---------------------------------------------------------------------------
 
 class _LLMSignals(QObject):
+    """Bridges brain's background thread → Qt main thread safely."""
     token = pyqtSignal(str)
     done  = pyqtSignal()
     error = pyqtSignal(str)

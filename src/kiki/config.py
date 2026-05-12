@@ -1,4 +1,7 @@
 import os
+import sys
+
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -7,6 +10,10 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 MODEL = "llama-3.3-70b-versatile"
 MAX_TOKENS = 300  # keep responses short, matches kiki's personality
+
+# For screenshot skill
+VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Mood FSM
 MOOD_TICK_MS = 100          # how often mood score updates
@@ -43,3 +50,32 @@ SYSTEM_PROMPT_GRUMPY = (
     "You are kiki. You are grumpy. Someone has been bothering you. "
     "You will still answer but you are not happy about it. Very short. Dry."
 )
+
+# For kiki paths
+
+def kiki_home() -> Path:
+    """
+    Platform-specific Kiki data directory.
+    Windows : C:/Users/<user>/AppData/Local/kiki
+    macOS   : ~/Library/Application Support/kiki
+    Linux   : ~/.local/share/kiki
+    """
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    
+    path = base / "kiki"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+KIKI_HOME    = kiki_home()
+MODELS_DIR   = KIKI_HOME / "models"
+CHROMA_DIR   = KIKI_HOME / "cache"
+LOG_DIR      = KIKI_HOME / "logs"
+
+# Skills / routing
+SKILL_THRESHOLD  = 0.30   # cosine similarity floor for skill match
+SKILL_INDEX_PATH = KIKI_HOME / "skill_index"   # where registry caches embeddings
