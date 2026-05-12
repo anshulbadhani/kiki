@@ -1,0 +1,7 @@
+[project]
+name = "kiki"
+version = "0.1.0"
+description = "A small, moody AI that lives on your screen."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
