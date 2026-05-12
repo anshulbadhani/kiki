@@ -18,3 +18,5 @@ Stack: Python 3.12, PyQt6, Groq API (llama-3.3-70b), uv for packaging.
 - **3:04 PM:** Claude limit reached 🙃
 - **3:12 PM:** I was manually fixing the bugs, when I realised that I have to copy paste same if conditions if I would have to add something new. Which defeats the purpose of the FSM in the first place. I would have to be aware of this pattern if I could make an MVP of this. Maybe this could go in 10 more hours wala thing
 - **3:32 PM:** I think I should take some rest now, I will write here when I come back after a break. Maybe study for exams, idk
+- **5:20 PM:** Getting back to the work
+- **5:33 PM:** Always on top is not working with WSLg. So, I will move to windows native (would have to setup python from scratch T_T)
