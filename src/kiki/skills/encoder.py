@@ -8,6 +8,7 @@ Usage:
     sim  = encoder.cosine(vec, other_vec)
 """
 from __future__ import annotations
+import os
 import sys
 import numpy as np
 from pathlib import Path
@@ -20,18 +21,31 @@ from ..paths import kiki_home
 # Platform path (mirrors setup.py — no import to avoid circular deps)
 # ---------------------------------------------------------------------------
 
+# def get_model_dir() -> Path:
+#     """
+#     Resolve model directory:
+#     1. If bundled via PyInstaller, use the temporary _MEIPASS folder.
+#     2. Otherwise, use the standard kiki home directory.
+#     """
+#     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+#         return Path(sys._MEIPASS) / "models"
+#     return kiki_home() / "models"
+
 def get_model_dir() -> Path:
-    """
-    Resolve model directory:
-    1. If bundled via PyInstaller, use the temporary _MEIPASS folder.
-    2. Otherwise, use the standard kiki home directory.
-    """
+    """Safely resolve the models directory for the .exe environment."""
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller 6+ places data in the _internal subfolder
+        internal_path = Path(sys._MEIPASS) / "_internal" / "models"
+        if internal_path.exists():
+            return internal_path
+        
+        # Fallback for older PyInstaller or different build configs
         return Path(sys._MEIPASS) / "models"
-    return kiki_home() / "models"
+    
+    # Dev Mode: Point to the local assets folder
+    return Path(__file__).resolve().parents[3] / "assets" / "models"
 
 DEFAULT_MODEL_DIR = get_model_dir()
-
 
 # ---------------------------------------------------------------------------
 # Encoder
