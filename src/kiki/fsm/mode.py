@@ -17,7 +17,8 @@ class Orb(State):
 
 class ChatOpen(State):
     def on_enter(self) -> None:
-        self.fsm.mood_fsm.truce()
+        # self.fsm.mood_fsm.truce() # resets kiki's mood (for avoiding kiki's tantrums while developing)
+        pass
 
     def handle_event(self, event: str, **kwargs) -> str | None:
         if event == "click":
@@ -122,8 +123,11 @@ if __name__ == "__main__":
     assert mood.mood == "Annoyed"
     mode.click()
     assert mode.mode == "ChatOpen"
-    assert mood.mood == "Calm"       # truce fired on_enter
-    assert mood.score == 0.0
+    assert mood.mood == "Annoyed"     # truce fired on_enter
+
+    # Only to use while development (Comment assert mood.mood == "Calm" above)
+    # assert mood.mood == "Calm"       # truce fired on_enter
+    # assert mood.score == 0.0      
 
     # send message → thinking → responding → back to chat
     mode.send_msg()
