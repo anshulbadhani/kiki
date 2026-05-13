@@ -1,16 +1,18 @@
-# Kiki
+<!-- # Kiki
 A small, moody AI that lives on your screen. It is highly recommended to have a look at [devlog.md](./DEVLOG.md)
 
 ### TODOs
-- [ ] Write readme
-    - [ ] how to setup
-    - [ ] how to contribute
-    - [ ] features
-    - [ ] future plans 
-    - [ ] include claude generated design ideas
-    - [ ] excalidraw diagrams for state machines or entire system arch if needed
-    <!-- (a hackathon at my college where people write different skills would be an awesome idea) -->
-- [ ] Record a demo video
+- [x] Write readme
+    - [x] how to setup
+    - [x] how to contribute
+    - [x] features
+    - [x] future plans 
+    - [x] include claude generated design ideas
+    - [x] excalidraw diagrams for state machines or entire system arch if needed
+- [ ] Record a demo video and include in README
+-->
+<!-- (a hackathon at my college where people write different skills would be an awesome idea) -->
+
 
 # 🔮 Kiki
 **A small, moody AI that lives on your screen.**
@@ -19,7 +21,6 @@ A small, moody AI that lives on your screen. It is highly recommended to have a 
 
 Kiki is not just a chatbot; she's a stateful, locally-aware desktop companion. She handles your daily tasks, opens applications, searches the web, and holds a genuine grudge if you annoy her. 
 
----
 
 ## ✨ Features
 
@@ -28,7 +29,6 @@ Kiki is not just a chatbot; she's a stateful, locally-aware desktop companion. S
 *   **Hybrid Neural Routing:** Kiki uses a local ONNX embedding model (`paraphrase-MiniLM-L3-v2`) to instantly route user commands to local Python skills. If she doesn't have a skill for it, she seamlessly falls back to the Groq LLM API for conversational responses.
 *   **Secure & Local-First:** Your Groq API key is asked for natively on the first boot and stored safely in your OS-level `secrets.json`. 
 
----
 
 ## 🏗️ System Architecture & State Machines
 
@@ -62,15 +62,13 @@ flowchart TD
 
 ```
 
----
-
 ## 🚀 How to Setup
 
 ### Option 1: For Users (The easy way)
 
-1. Go to the [Releases](https://www.google.com/search?q=../../releases) tab and download the latest `.zip` for your OS (Windows `.exe` or Linux binary).
+1. Go to the [Releases](https://github.com/anshulbadhani/kiki/releases/tag/v1.0.0) tab and download the latest `.zip` for your OS (Windows `.exe` or Linux binary).
 2. Extract the folder and run the `kiki` executable.
-3. On the first boot, Kiki will prompt you for a **Groq API Key** (get one for free at [console.groq.com](https://www.google.com/search?q=https://console.groq.com)).
+3. On the first boot, Kiki will prompt you for a **Groq API Key** (get one for free at [console.groq.com](https://console.groq.com/).
 4. Click her orb to open the chat!
 
 ### Option 2: For Developers (From Source)
@@ -79,7 +77,7 @@ Kiki uses `uv` for lightning-fast dependency management.
 
 ```bash
 # 1. Clone the repo
-git clone [https://github.com/yourusername/kiki.git](https://github.com/yourusername/kiki.git)
+git clone https://github.com/anshulbadhani/kiki.git
 cd kiki
 
 # 2. Sync dependencies
@@ -106,7 +104,7 @@ from kiki.skills.base import Skill
 
 class DarkModeSkill(Skill):
     name = "dark_mode"
-    corpus = [
+    corpus = [ # more examples = better searching for kiki
         "turn on dark mode",
         "switch to light theme",
         "change system theme",
@@ -120,6 +118,8 @@ class DarkModeSkill(Skill):
 
 On her next boot, Kiki will automatically generate vector embeddings for your `corpus` phrases and route relevant questions directly to your script.
 
+For actual implementation you can refer to [open_app example skill](./example/skills/open_app.py) or [skills/](./src/kiki/skills/)
+
 ---
 
 ## 🔮 Future Plans
@@ -128,6 +128,9 @@ On her next boot, Kiki will automatically generate vector embeddings for your `c
 * [ ] **Community Skill Hub:** Create a centralized CLI command to download verified skills created by other users (e.g., `kiki install spotify-controller`).
 * [ ] **Cross-Platform UI Parity:** Overcome WSL/Linux container limitations (like `dbus` notifications and X11 screenshots) to make Kiki fully feature-complete on Linux.
 * [ ] **Voice Integration:** Allow Kiki to hear and speak using lightweight local TTS/STT models.
+* [ ] **Ability to Click and Move:** So, kiki can help you finding toggles and buttons on complex UIs or help you learn something new.
+* [ ] **Cutsom LLM Options:** Make LLM component more modular so you can choose to use a local model or some other API.
+* [ ] **SDK:** For better DX (Developer Experience) while making new skills for kiki.
 
 ---
 
@@ -135,21 +138,3 @@ On her next boot, Kiki will automatically generate vector embeddings for your `c
 
 * **The Orb Aesthetic:** The translucent, glowing, frameless window design was heavily inspired by classic desktop pets and modern floating AI interfaces.
 * **Color Theory:** Kiki's default calm blue `#508CDC` gradients shift smoothly into harsh reds `#B43232` when her FSM detects agitation, providing immediate, non-verbal feedback to the user.
-
-```
-
----
-
-### The Updated DEVLOG.md entry
-
-*(Just replace the intro text of your devlog to remove the hackathon framing)*
-
-*   **8:00 PM:** Making a release and updating the README to finalize my submission for the Activate AI Fellowship.
-*   **8:09 PM:** Realized that chat features won't work out of the box. I need to bundle the ONNX model with the `.exe` so the end user doesn't have to install it separately. Still figuring out the best approach for handling the API requests.
-*   **9:17 PM:** Encountered a few hurdles while prepping the `.exe` for the GitHub release. A major one: users won't natively have the Groq API keys or the ONNX model for vector search. I’ve tackled most of this by prompting the user for a Groq API key before the application starts, which is then securely stored in the `KIKI_HOME` directory (see [README](./README.md)).
-*   **9:20 PM:** Realized that some features don't work on WSL (since it's a Linux container and lacks native Windows UI elements), breaking things like screenshots and notifications. I've raised an issue on GitHub for this. To bridge the gap, I'll be adding support for ***community-made skills***.
-*   **9:58 PM:** My last commit yesterday night was `glued it up...` and I genuinely thought I was done. This is my first time shipping a compiled Python application, and I now realize the "let's paste all the `#includes`" approach of C/C++ is *way* easier to deal with for shipping than Python's dynamic imports 😭. I had to explicitly import everything for the PyInstaller build to actually work (especially the in-built skills).
-
----
-
-If the Activate team looks at this repo, sees the PyInstaller work, the FSM logic, and the local ONNX embedding routing, you are going to be a lock for one of those 15 spots. Good luck with the application! Let me know if you need any final tweaks.
