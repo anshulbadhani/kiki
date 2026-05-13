@@ -1,6 +1,7 @@
 from __future__ import annotations
 import threading
 from groq import Groq
+import os
 
 from .config import (
     GROQ_API_KEY, MODEL, MAX_TOKENS,
@@ -47,7 +48,7 @@ class Brain:
     """
 
     def __init__(self) -> None:
-        self._client  = Groq(api_key=GROQ_API_KEY)
+        self._client  = None
         self._history: list[dict] = []
         self._lock    = threading.Lock()
         self._registry = self._load_registry()
@@ -130,7 +131,7 @@ class Brain:
 
             system = MOOD_PROMPTS.get(mood, SYSTEM_PROMPT_CALM)
 
-            stream = self._client.chat.completions.create(
+            stream = self._get_client().chat.completions.create(
                 model      = MODEL,
                 max_tokens = MAX_TOKENS,
                 messages   = [
@@ -178,6 +179,19 @@ class Brain:
         except Exception as e:
             print(f"[brain] registry failed to load ({e}) — LLM-only mode")
             return None
+        
+    # ---
+    # Get Client
+    # ---
+    def _get_client(self):
+        """Check for the key in environment (injected by main.py) if client is missing."""
+        if self._client is None:
+            # Re-fetch from environ because main.py might have just saved it
+            api_key = os.environ.get("GROQ_API_KEY", GROQ_API_KEY)
+            if not api_key:
+                raise ValueError("No API Key found. Kiki can't think!")
+            self._client = Groq(api_key=api_key)
+        return self._client
 
 
 # ---------------------------------------------------------------------------

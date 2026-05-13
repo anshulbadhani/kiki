@@ -14,15 +14,12 @@ Optional:
 from __future__ import annotations
 import importlib
 import pkgutil
-import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 
-import numpy as np
-
-from .encoder import Encoder
-from .base import Skill
-from ..config import SKILL_THRESHOLD
+from kiki.skills.encoder import Encoder
+from kiki.skills.base import Skill
+from kiki.config import SKILL_THRESHOLD
 
 
 # # ---------------------------------------------------------------------------
@@ -59,27 +56,63 @@ class Registry:
         self._encoder: Encoder         = encoder
         self._skills:  dict[str, Skill] = {}
         self._load_all()
+        self._load_external()
 
     # -----------------------------------------------------------------------
     # Loading
     # -----------------------------------------------------------------------
 
+    # Good for testing but fails while shipping. Keeping it for fast prototyping while adding new in-built skills
+    # def _load_all(self) -> None:
+    #     pkg_path = [str(Path(__file__).parent)]
+    #     pkg_name = __package__
+
+    #     for finder, module_name, _ in pkgutil.iter_modules(pkg_path):
+    #         if module_name in ("registry", "encoder", "base"):
+    #             continue
+
+    #         full_name = f"{pkg_name}.{module_name}"
+    #         print(f"[registry] scanning: {module_name}")
+    #         try:
+    #             mod = importlib.import_module(full_name)
+    #         except Exception as e:
+    #             print(f"[registry] failed to load {module_name}: {e}")
+    #             continue
+
+    #         for attr_name in dir(mod):
+    #             attr = getattr(mod, attr_name)
+    #             if (
+    #                 isinstance(attr, type)
+    #                 and issubclass(attr, Skill)
+    #                 and attr is not Skill
+    #             ):
+    #                 try:
+    #                     instance        = attr()
+    #                     instance.vector = self._encoder.encode(instance.corpus)
+    #                     self._skills[instance.name] = instance
+    #                     print(f"[registry] loaded skill: {instance.name}")
+    #                 except Exception as e:
+    #                     print(f"[registry] failed to instantiate {attr_name}: {e}")
+    
     def _load_all(self) -> None:
-        pkg_path = [str(Path(__file__).parent)]
-        pkg_name = __package__
+        """Loads Kiki's core built-in skills."""
+        # 1. Explicitly import the built-in modules
+        from . import (
+            clipboard, 
+            help, 
+            notify, 
+            screenshot, 
+            show_skills, 
+            web_search
+        )
+        
+        # 2. Put them in a list
+        core_modules = [
+            clipboard, help, notify, screenshot, show_skills, web_search
+        ]
 
-        for finder, module_name, _ in pkgutil.iter_modules(pkg_path):
-            if module_name in ("registry", "encoder", "base"):
-                continue
-
-            full_name = f"{pkg_name}.{module_name}"
-            print(f"[registry] scanning: {module_name}")
-            try:
-                mod = importlib.import_module(full_name)
-            except Exception as e:
-                print(f"[registry] failed to load {module_name}: {e}")
-                continue
-
+        # 3. Load them exactly like we load external skills
+        for mod in core_modules:
             for attr_name in dir(mod):
                 attr = getattr(mod, attr_name)
                 if (
@@ -87,14 +120,60 @@ class Registry:
                     and issubclass(attr, Skill)
                     and attr is not Skill
                 ):
-                    try:
-                        instance        = attr()
-                        instance.vector = self._encoder.encode(instance.corpus)
-                        self._skills[instance.name] = instance
-                        print(f"[registry] loaded skill: {instance.name}")
-                    except Exception as e:
-                        print(f"[registry] failed to instantiate {attr_name}: {e}")
+                    instance        = attr()
+                    instance.vector = self._encoder.encode(instance.corpus)
+                    self._skills[instance.name] = instance
+                    print(f"[registry] loaded built-in skill: {instance.name}")
 
+    # -----------------------------------------------------------------------
+    # Custom Skills Support (CSS 🦅)
+    # -----------------------------------------------------------------------
+
+    def _load_external(self) -> None:
+        """Dynamically loads raw .py files from the user's local AppData folder."""
+        import sys
+        import importlib.util
+        from ..paths import user_skills_dir
+        
+        skills_dir = user_skills_dir()
+        print(f"[registry] scanning external folder: {skills_dir}")
+
+        for py_file in skills_dir.glob("*.py"):
+            if py_file.stem.startswith("_"):
+                continue
+
+            print(f"[registry] loading custom skill: {py_file.name}")
+            try:
+                # 1. Create a safe, unique module name
+                module_name = f"kiki.custom.{py_file.stem}"
+                
+                # 2. Load the spec
+                spec = importlib.util.spec_from_file_location(module_name, py_file)
+                if spec and spec.loader:
+                    mod = importlib.util.module_from_spec(spec)
+                    
+                    # 3. THE MAGIC FIX: Register it globally BEFORE executing!
+                    sys.modules[module_name] = mod 
+                    
+                    # 4. Now it is safe to execute
+                    spec.loader.exec_module(mod)
+
+                    # Scan the loaded module for Skill subclasses
+                    for attr_name in dir(mod):
+                        attr = getattr(mod, attr_name)
+                        if (
+                            isinstance(attr, type)
+                            and issubclass(attr, Skill)
+                            and attr is not Skill
+                        ):
+                            instance        = attr()
+                            instance.vector = self._encoder.encode(instance.corpus)
+                            self._skills[instance.name] = instance
+                            print(f"[registry] successfully loaded external skill: {instance.name}")
+
+            except Exception as e:
+                print(f"[registry] failed to load external skill {py_file.name}: {e}")
+                                
     # -----------------------------------------------------------------------
     # Routing
     # -----------------------------------------------------------------------
@@ -201,18 +280,25 @@ if __name__ == "__main__":
     registry._encoder = enc
     registry._skills  = {}
 
-    for mod in (stub_open, stub_search):
-        skill        = Skill(
-            name            = mod.NAME,
-            description     = mod.DESCRIPTION,
-            examples        = mod.EXAMPLES,
-            parameters      = mod.PARAMETERS,
+    def make_skill(target_mod):
+        class ConcreteSkill(Skill):
+            def run(self, **kwargs) -> str:
+                # This now correctly points to the captured target_mod
+                return target_mod.run(**kwargs)
+        
+        return ConcreteSkill(
+            name            = target_mod.NAME,
+            description     = target_mod.DESCRIPTION,
+            examples        = target_mod.EXAMPLES,
+            parameters      = target_mod.PARAMETERS,
             requires_vision = False,
-            run             = mod.run,
         )
+
+    for mod in (stub_open, stub_search):
+        skill = make_skill(mod)
         skill.vector = enc.encode(skill.corpus)
         registry._skills[skill.name] = skill
-
+        
     # route open
     result = registry.route("launch spotify")
     assert result is not None,          "expected a match for 'launch spotify'"

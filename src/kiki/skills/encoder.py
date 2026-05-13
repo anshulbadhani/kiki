@@ -13,25 +13,24 @@ import numpy as np
 from pathlib import Path
 
 from ..config import SKILL_THRESHOLD
+from ..paths import kiki_home
 
 
 # ---------------------------------------------------------------------------
 # Platform path (mirrors setup.py — no import to avoid circular deps)
 # ---------------------------------------------------------------------------
 
-def _kiki_home() -> Path:
-    if sys.platform == "win32":
-        import os
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME",
-                                   Path.home() / ".local" / "share"))
-    return base / "kiki"
+def get_model_dir() -> Path:
+    """
+    Resolve model directory:
+    1. If bundled via PyInstaller, use the temporary _MEIPASS folder.
+    2. Otherwise, use the standard kiki home directory.
+    """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        return Path(sys._MEIPASS) / "models"
+    return kiki_home() / "models"
 
-
-DEFAULT_MODEL_DIR = _kiki_home() / "models"
+DEFAULT_MODEL_DIR = get_model_dir()
 
 
 # ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import sys
 
 from pathlib import Path
 from dotenv import load_dotenv
+from .paths import kiki_home
 
 load_dotenv()
 
@@ -52,24 +53,6 @@ SYSTEM_PROMPT_GRUMPY = (
 )
 
 # For kiki paths
-
-def kiki_home() -> Path:
-    """
-    Platform-specific Kiki data directory.
-    Windows : C:/Users/<user>/AppData/Local/kiki
-    macOS   : ~/Library/Application Support/kiki
-    Linux   : ~/.local/share/kiki
-    """
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    
-    path = base / "kiki"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 KIKI_HOME    = kiki_home()
 MODELS_DIR   = KIKI_HOME / "models"

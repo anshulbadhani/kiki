@@ -11,3 +11,7 @@ wheels/
 
 # Environment Variables
 .env
+
+# Assets
+# onnxruntime model for approoximate search of skills
+assets/

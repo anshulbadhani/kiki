@@ -31,6 +31,7 @@ def kiki_home() -> Path:
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
     else:
+        import os
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
     path = base / "kiki"
     path.mkdir(parents=True, exist_ok=True)
