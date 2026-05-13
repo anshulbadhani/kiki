@@ -29,6 +29,16 @@ Kiki is not just a chatbot; she's a stateful, locally-aware desktop companion. S
 *   **Hybrid Neural Routing:** Kiki uses a local ONNX embedding model (`paraphrase-MiniLM-L3-v2`) to instantly route user commands to local Python skills. If she doesn't have a skill for it, she seamlessly falls back to the Groq LLM API for conversational responses.
 *   **Secure & Local-First:** Your Groq API key is asked for natively on the first boot and stored safely in your OS-level `secrets.json`. 
 
+## 🥹 Kiki has feelings
+<img width="288" height="288" alt="image" src="https://github.com/user-attachments/assets/c1246760-8322-48a1-b4d0-b03a54993d5f" />
+Kiki chill
+<img width="288" height="288" alt="image" src="https://github.com/user-attachments/assets/3ba65e64-e4d8-49a2-aeaa-34bca1f663d5" />
+Kiki not chill
+
+<br>
+<img width="480" height="630" alt="image" src="https://github.com/user-attachments/assets/6d51d8e6-923d-4e4c-a57d-04b8c032f52d" />
+
+> She was grumpy. I said hi
 
 ## 🏗️ System Architecture & State Machines
 
